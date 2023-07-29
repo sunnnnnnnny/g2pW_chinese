@@ -84,7 +84,7 @@ class G2PWConverter:
             param_pos=self.config.param_pos
         )
         checkpoint = os.path.join(model_dir, 'best_accuracy.pth')
-        self.model.load_state_dict(torch.load(checkpoint, map_location=self.device))
+        self.model.load_state_dict(torch.load(checkpoint, map_location=self.device), strict=False)
         self.model.to(self.device)
 
     def __call__(self, sentences):
