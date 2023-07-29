@@ -113,8 +113,14 @@ class G2PW(BertPreTrainedModel):
             self.pos_classifier = nn.Linear(self.config.hidden_size, self.num_pos_tags)
 
     def _weighted_softmax(self, logits, weights, eps):
+        # logits torch.Size([1, 650])
+        # weights torch.Size([1, 650])
+        # eps 1e-6
         max_logits, _ = torch.max(logits, dim=-1, keepdim=True)
+        # max_logits tensor([[1.7395]], grad_fn=<MaxBackward0>)
         weighted_exp_logits = torch.exp(logits - max_logits) * weights
+        # (logits - max_logits).max()
+        # torch.exp(logits - max_logits).max() = 1
         norm = torch.sum(weighted_exp_logits, dim=-1, keepdim=True)
         probs = weighted_exp_logits / norm
         probs = torch.clamp(probs, min=eps, max=1-eps)
@@ -132,6 +138,14 @@ class G2PW(BertPreTrainedModel):
         return scaling
 
     def forward(self, input_ids, token_type_ids, attention_mask, phoneme_mask, char_ids, position_ids, pos_ids=None, label_ids=None, eps=1e-6):
+        # input_ids.shape torch.Size([1, 25])
+        # token_type_ids all 0 torch.Size([1, 25])
+        # attention_mask all 1 torch.Size([1, 25])
+        # phoneme_mask sum 2  torch.Size([1, 650])
+        # char_ids tensor([11]) 多音字汉字在多音字汉字表中的索引
+        # position_ids tensor([17]) 多音字汉字在该句的索引
+        # pos_ids tensor([3]) pos_tag在POS_TAGS中的索引
+        # label_ids tensor([281]) pinyin在650个多音字拼音字典中的索引
         transformers_major_ver = int(transformers.__version__.split('.')[0])
         if transformers_major_ver >= 4:
             sequence_output, pooled_output = self.bert(
@@ -140,6 +154,7 @@ class G2PW(BertPreTrainedModel):
                 attention_mask=attention_mask,
                 return_dict=False
             )
+            # torch.Size([1, 25, 768]) torch.Size([1, 768])
         else:
             sequence_output, pooled_output = self.bert(
                 input_ids,
@@ -149,9 +164,12 @@ class G2PW(BertPreTrainedModel):
 
         batch_size = input_ids.size(0)
         orig_selected_hidden = sequence_output[torch.arange(batch_size), position_ids]
+        # orig_selected_hidden torch.Size([1, 768])
+        # orig_selected_hidden:select polyphone's hidden representation
         selected_hidden = orig_selected_hidden
+        #  selected_hidden: for process
 
-        if self.use_conditional:
+        if self.use_conditional:  # 1
             if (self.param_conditional['char+pos-second']
                     or self.param_conditional['char+pos-second_lowrank']
                     or self.param_conditional['char+pos-second_fm']
@@ -159,18 +177,31 @@ class G2PW(BertPreTrainedModel):
                     or self.param_conditional['fix_mode'] == 'count_distr:char+pos'):
                 pred_pos_ids = pos_ids if self.training or not self.param_pos['pos_joint_training'] \
                     else self.pos_classifier(orig_selected_hidden).argmax(dim=-1)  # teacher mode while training
-
+                # pred_pos_ids: true pos_id tensor([3])
             affect_terms = []
             if self.param_conditional['bias']:
+                # self.descriptor_bias Embedding(1, 650)
+                #  torch.zeros_like(char_ids) > tensor([0])
                 bias_tensor = self.descriptor_bias(torch.zeros_like(char_ids))
+                # bias_tensor torch.Size([1, 650])
                 affect_terms.append(bias_tensor)
+                # affect_terms[0] =  bias_tensor torch.Size([1, 650])
             if self.param_conditional['char-linear']:
+                # self.char_descriptor Embedding(623, 650)
+                # self.char is  pinyin
+                # affect_terms[1] = torch.Size([1, 650])
                 affect_terms.append(self.char_descriptor(char_ids))
             if self.param_conditional['pos-linear']:
+                # 0
                 affect_terms.append(self.pos_descriptor(pred_pos_ids))
             if self.param_conditional['char+pos-second']:
+                # char_ids tensor([11])
+                # pred_pos_ids tensor([3])
                 char_pos_ids = self._get_char_pos_ids(char_ids, pred_pos_ids)
+                # char_ids * self.num_pos_tags + pos_ids = 11*11+3=124
                 affect_terms.append(self.second_order_descriptor(char_pos_ids))
+                # self.second_order_descriptor Embedding(6853, 650)
+                # affect_terms[2] = torch.Size([1, 650])
             if self.param_conditional['char+pos-second_lowrank']:
                 char_pos_ids = self._get_char_pos_ids(char_ids, pred_pos_ids)
                 affect_terms.append(self.second_lowrank_descriptor(char_pos_ids))
@@ -182,6 +213,7 @@ class G2PW(BertPreTrainedModel):
                     )
                 )
             affect_hidden = sum(affect_terms)
+            # len(affect_terms) = 3
 
             if self.param_conditional['fix_mode'] == 'count_distr:char':
                 phoneme_mask = phoneme_mask * F.embedding(char_ids, self.char_fix_emb)
@@ -191,11 +223,16 @@ class G2PW(BertPreTrainedModel):
             elif self.param_conditional['affect_location'] == 'emb':
                 selected_hidden = selected_hidden * affect_hidden
             elif self.param_conditional['affect_location'] == 'softmax':
+                # phoneme_mask torch.Size([1, 650])
+                # affect_hidden torch.Size([1, 650])
                 phoneme_mask = phoneme_mask * torch.sigmoid(affect_hidden)
+                # phoneme_mask torch.Size([1, 650])
             else:
                 raise Exception
 
         logits = self.classifier(selected_hidden)
+        # Linear(in_features=768, out_features=650, bias=True)
+        # logits torch.Size([1, 650])
         probs = self._weighted_softmax(logits, phoneme_mask, eps)
         if label_ids is not None:
             if self.use_focal:

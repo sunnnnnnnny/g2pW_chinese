@@ -1,4 +1,4 @@
-root = './cpp_dataset/'
+root = './cpp_dataset/cpp_dataset/'
 
 manual_seed = 1313
 model_source = 'bert-base-chinese'
@@ -22,7 +22,8 @@ valid_sent_path = root + 'dev.sent'
 valid_lb_path = root + 'dev.lb'
 test_sent_path = root + 'test.sent'
 test_lb_path = root + 'test.lb'
-batch_size = 256
+#batch_size = 256
+batch_size = 1
 lr = 5e-5
 val_interval = 200
 num_iter = 10000

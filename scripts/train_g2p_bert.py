@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, './')
 
 import os
@@ -25,7 +26,8 @@ from g2pw.utils import load_config, RunningAverage, get_logger
 def train_batch(model, data, optimizer, device):
     model.train()
     input_ids, token_type_ids, attention_mask, phoneme_mask, char_ids, position_ids, label_ids = \
-        [data[name].to(device) for name in ('input_ids', 'token_type_ids', 'attention_mask', 'phoneme_mask', 'char_ids', 'position_ids', 'label_ids')]
+        [data[name].to(device) for name in
+         ('input_ids', 'token_type_ids', 'attention_mask', 'phoneme_mask', 'char_ids', 'position_ids', 'label_ids')]
     pos_ids = data['pos_ids'].to(device) if model.use_pos else None
 
     probs, loss, pos_logits = model(
@@ -57,7 +59,9 @@ def evaluate(model, valid_loader, device):
     with torch.no_grad():
         for data in tqdm(valid_loader, desc='evaluate'):
             input_ids, token_type_ids, attention_mask, phoneme_mask, char_ids, position_ids, label_ids = \
-                [data[name].to(device) for name in ('input_ids', 'token_type_ids', 'attention_mask', 'phoneme_mask', 'char_ids', 'position_ids', 'label_ids')]
+                [data[name].to(device) for name in (
+                'input_ids', 'token_type_ids', 'attention_mask', 'phoneme_mask', 'char_ids', 'position_ids',
+                'label_ids')]
             pos_ids = data['pos_ids'].to(device) if model.use_pos else None
 
             probs, loss, pos_logits = model(
@@ -108,13 +112,16 @@ def test(config, checkpoint, device, sent_path=None, lb_path=None, pos_path=None
     tokenizer = BertTokenizer.from_pretrained(config.model_source)
 
     polyphonic_chars = [line.split('\t') for line in open(config.polyphonic_chars_path).read().strip().split('\n')]
-    labels, char2phonemes = get_char_phoneme_labels(polyphonic_chars) if config.use_char_phoneme else get_phoneme_labels(polyphonic_chars)
+    labels, char2phonemes = get_char_phoneme_labels(
+        polyphonic_chars) if config.use_char_phoneme else get_phoneme_labels(polyphonic_chars)
     chars = sorted(list(char2phonemes.keys()))
 
     test_texts, test_query_ids, test_phonemes = prepare_data(sent_path, lb_path)
     test_pos_tags = prepare_pos(pos_path) if config.use_pos else None
-    test_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, test_texts, test_query_ids, phonemes=test_phonemes, pos_tags=test_pos_tags,
-                               use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme, use_pos=config.use_pos, window_size=config.window_size, for_train=True)
+    test_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, test_texts, test_query_ids,
+                               phonemes=test_phonemes, pos_tags=test_pos_tags,
+                               use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme,
+                               use_pos=config.use_pos, window_size=config.window_size, for_train=True)
 
     test_loader = DataLoader(
         dataset=test_dataset,
@@ -167,7 +174,8 @@ def main(config_path):
     tokenizer = BertTokenizer.from_pretrained(config.model_source)
 
     polyphonic_chars = [line.split('\t') for line in open(config.polyphonic_chars_path).read().strip().split('\n')]
-    labels, char2phonemes = get_char_phoneme_labels(polyphonic_chars) if config.use_char_phoneme else get_phoneme_labels(polyphonic_chars)
+    labels, char2phonemes = get_char_phoneme_labels(
+        polyphonic_chars) if config.use_char_phoneme else get_phoneme_labels(polyphonic_chars)
     chars = sorted(list(char2phonemes.keys()))
 
     train_texts, train_query_ids, train_phonemes = prepare_data(config.train_sent_path, config.train_lb_path)
@@ -176,16 +184,20 @@ def main(config_path):
     train_pos_tags = prepare_pos(config.param_pos['train_pos_path']) if config.use_pos else None
     valid_pos_tags = prepare_pos(config.param_pos['valid_pos_path']) if config.use_pos else None
 
-    train_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, train_texts, train_query_ids, phonemes=train_phonemes, pos_tags=train_pos_tags,
-                                use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme, use_pos=config.use_pos, window_size=config.window_size, for_train=True)
-    valid_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, valid_texts, valid_query_ids, phonemes=valid_phonemes, pos_tags=valid_pos_tags,
-                                use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme, use_pos=config.use_pos, window_size=config.window_size, for_train=True)
-
+    train_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, train_texts, train_query_ids,
+                                phonemes=train_phonemes, pos_tags=train_pos_tags,
+                                use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme,
+                                use_pos=config.use_pos, window_size=config.window_size, for_train=True)
+    valid_dataset = TextDataset(tokenizer, labels, char2phonemes, chars, valid_texts, valid_query_ids,
+                                phonemes=valid_phonemes, pos_tags=valid_pos_tags,
+                                use_mask=config.use_mask, use_char_phoneme=config.use_char_phoneme,
+                                use_pos=config.use_pos, window_size=config.window_size, for_train=True)
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=config.batch_size,
         collate_fn=train_dataset.create_mini_batch,
-        shuffle=True,
+        shuffle=False,
+        #shuffle=True,
         num_workers=config.num_workers
     )
     valid_loader = DataLoader(
@@ -238,7 +250,8 @@ def main(config_path):
 
                 # log
                 pos_acc = 'none' if metric['pos_acc'] is None else metric['pos_acc']
-                logger.info(f'[{i}] train_loss={train_loss:.6} valid_loss={metric["avg_loss"]:.6} valid_pos_acc={pos_acc:.6} valid_acc={metric["acc"]:.6} / {metric["avg_acc_by_char"]:.6} / {metric["avg_acc_by_char_bopomofo"]:.6} best_acc={best_accuracy:.6}')
+                logger.info(
+                    f'[{i}] train_loss={train_loss:.6} valid_loss={metric["avg_loss"]:.6} valid_pos_acc={pos_acc:.6} valid_acc={metric["acc"]:.6} / {metric["avg_acc_by_char"]:.6} / {metric["avg_acc_by_char_bopomofo"]:.6} best_acc={best_accuracy:.6}')
                 logger.info(f'now: {datetime.now()}')
 
             if i >= config.num_iter:
@@ -254,7 +267,8 @@ def main(config_path):
         test_metric = test(config, checkpoint_path, device)
 
         test_pos_acc = 'none' if test_metric['pos_acc'] is None else test_metric['pos_acc']
-        logger.info(f'valid_best_acc={best_accuracy:.6} test_loss={test_metric["avg_loss"]:.6} test_pos_acc={test_pos_acc:.6} test_acc={test_metric["acc"]:.6} / {test_metric["avg_acc_by_char"]:.6} / {test_metric["avg_acc_by_char_bopomofo"]:.6}')
+        logger.info(
+            f'valid_best_acc={best_accuracy:.6} test_loss={test_metric["avg_loss"]:.6} test_pos_acc={test_pos_acc:.6} test_acc={test_metric["acc"]:.6} / {test_metric["avg_acc_by_char"]:.6} / {test_metric["avg_acc_by_char_bopomofo"]:.6}')
 
 
 if __name__ == '__main__':

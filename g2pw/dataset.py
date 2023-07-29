@@ -120,18 +120,34 @@ class TextDataset(Dataset):
             return self[(idx + 1) % len(self)]
 
         text, query_id, tokens, text2token, token2text = self._truncate(self.max_len, text, query_id, tokens, text2token, token2text)
-
+        # import ipdb
+        # ipdb.set_trace()
+        # text 盛顿政府对威士忌酒暴乱的镇压得到了广泛的认同。
+        # tokens ['盛', '顿', '政', '府', '对', '威', '士', '忌', '酒', '暴', '乱', '的', '镇', '压', '得', '到', '了', '广', '泛', '的', '认', '同', '。']
+        # query_id 16 text[16] = '了'
         processed_tokens = ['[CLS]'] + tokens + ['[SEP]']
 
-        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(processed_tokens))
-        token_type_ids = torch.tensor([0] * len(processed_tokens))
-        attention_mask = torch.tensor([1] * len(processed_tokens))
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(processed_tokens))  # bert normal input
+        token_type_ids = torch.tensor([0] * len(processed_tokens))  # bert normal input
+        attention_mask = torch.tensor([1] * len(processed_tokens))  # bert normal input
 
         query_char = text[query_id]
+        # query_char '了'
+        # self.labels = [['a1', 'a4', 'a5', 'ai1', 'ai2', 'ai4', 'ao1', 'ao2', 'ao4', 'ba1', 'ba3', ...]
+        # len(self.labels) = 650
+        # len(self.char2phonemes) = 623
+        # self.char2phonemes {'万': [518], '上': [454], '与': [583, 584], '丧': [444, 445]} len(self.char2phonemes)=623
+        # self.chars = ['万', '上', '与', '丧', '中', '为', '丽', '么',...] len(self.chars) = 623
+        # self.char2phonemes["了"] = [281, 296]
+
         phoneme_mask = [1 if i in self.char2phonemes[query_char] else 0 for i in range(len(self.labels))] \
             if self.use_mask else [1] * len(self.labels)
+        # len(phoneme_mask) = 650 all 0
+        # sum(phoneme_mask) = 2
         char_id = self.chars.index(query_char)
+        # char_id 11
         position_id = text2token[query_id] + 1  # [CLS] token locate at first place
+        # ...
 
         outputs = {
             'input_ids': input_ids,
@@ -143,12 +159,21 @@ class TextDataset(Dataset):
         }
 
         if self.use_pos and self.pos_tags is not None:
+            # yes
+            # len(self.pos_tags) = 79117
+            # self.POS_TAGS ['UNK', 'A', 'C', 'D', 'I', 'N', 'P', 'T', 'V', 'DE', 'SHI']
             pos_id = self.POS_TAGS.index(self.pos_tags[idx])
+            # pos_id 3
             outputs['pos_id'] = pos_id
 
         if self.for_train:
+            # yes
+            # len(self.phonemes) = 79117
             phoneme = self.phonemes[idx]
+            # phoneme 'le5'
+            # self.use_char_phoneme 0
             label_id = self.labels.index(f'{query_char} {phoneme}' if self.use_char_phoneme else phoneme)
+            # label_id 281
             outputs['label_id'] = label_id
 
         info = {
